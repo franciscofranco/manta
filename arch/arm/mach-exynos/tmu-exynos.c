@@ -132,21 +132,6 @@ static void tmu_monitor(struct work_struct *work)
 		break;
 	}
 
-	/* Memory throttling */
-	if (cur_temp >= data->ts.start_mem_throttle &&
-		!info->mem_throttled) {
-		set_refresh_period(FREQ_IN_PLL, info->auto_refresh_mem_throttle);
-		info->mem_throttled = true;
-		dev_dbg(info->dev, "set auto refresh period %dns\n",
-				info->auto_refresh_mem_throttle);
-	} else if (cur_temp <= data->ts.stop_mem_throttle &&
-		info->mem_throttled) {
-		set_refresh_period(FREQ_IN_PLL, info->auto_refresh_normal);
-		info->mem_throttled = false;
-		dev_dbg(info->dev, "set auto refresh period %dns\n",
-				info->auto_refresh_normal);
-	}
-
 	queue_delayed_work_on(0, tmu_monitor_wq,
 			      &info->polling, info->sampling_rate);
 out:
