@@ -132,6 +132,7 @@ static struct workqueue_struct *input_wq;
 static struct work_struct input_work;
 #define DEFAULT_BOOSTED_TIME_INTERVAL 100
 u32 boosted_time;
+extern void input_boost_gpu_lock(void);
 
 static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 		unsigned int event);
@@ -979,6 +980,7 @@ static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
 	boostpulse_endtime = ktime_to_us(ktime_get()) + boostpulse_duration_val;
 	trace_cpufreq_interactive_boost("pulse");
 	queue_work_on(0, input_wq, &input_work);
+	input_boost_gpu_lock();
 	return count;
 }
 

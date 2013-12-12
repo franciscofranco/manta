@@ -145,6 +145,25 @@ static int mali_dvfs_update_asv(int cmd)
 }
 #endif
 
+#define DEFAULT_BOOSTED_TIME_DURATION 1000
+#define DEFAULT_BOOSTED_TIME_INTERVAL 100
+u32 input_time;
+
+void input_boost_gpu_lock(void)
+{
+	mali_dvfs_status *dvfs_status;
+
+	if (input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_INTERVAL) > jiffies)
+		return;
+
+	dvfs_status = &mali_dvfs_status_current;
+
+	dvfs_status->step = 5;
+	kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
+
+	input_time = jiffies;
+}
+
 static void mali_dvfs_event_proc(struct work_struct *w)
 {
 	unsigned long flags;
@@ -168,19 +187,15 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 	}
 #endif
 	spin_lock_irqsave(&mali_dvfs_spinlock, flags);
+
 	if (dvfs_status->utilisation > mali_dvfs_infotbl[dvfs_status->step].max_threshold) {
-		if (dvfs_status->step==kbase_platform_dvfs_get_level(450)) {
-			if (platform->utilisation > mali_dvfs_infotbl[dvfs_status->step].max_threshold)
-				dvfs_status->step++;
-			BUG_ON(dvfs_status->step >= MALI_DVFS_STEP);
-		} else {
+		if (!(dvfs_status->step >= MALI_DVFS_STEP))
 			dvfs_status->step++;
-			BUG_ON(dvfs_status->step >= MALI_DVFS_STEP);
-		}
 	} else if ((dvfs_status->step > 0) && (platform->time_tick == MALI_DVFS_TIME_INTERVAL) && (platform->utilisation < mali_dvfs_infotbl[dvfs_status->step].min_threshold)) {
-		BUG_ON(dvfs_status->step <= 0);
-		dvfs_status->step--;
+		if (!(dvfs_status->step <= 0))
+			dvfs_status->step--;		
 	}
+
 #ifdef CONFIG_MALI_T6XX_FREQ_LOCK
 	if ((dvfs_status->upper_lock >= 0) && (dvfs_status->step > dvfs_status->upper_lock)) {
 		dvfs_status->step = dvfs_status->upper_lock;
@@ -191,9 +206,19 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 			dvfs_status->step = dvfs_status->under_lock;
 	}
 #endif
-	spin_unlock_irqrestore(&mali_dvfs_spinlock, flags);
-	kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
 
+	spin_unlock_irqrestore(&mali_dvfs_spinlock, flags);
+
+	if (!(dvfs_status->step == kbase_platform_dvfs_get_level(mali_dvfs_infotbl[dvfs_status->step].clock)))
+	{
+		if (input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_DURATION) > jiffies)
+			if (dvfs_status->step < 5)
+				goto unlock;
+
+		kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
+	}
+
+unlock:
 	mutex_unlock(&mali_enable_clock_lock);
 }
 
@@ -314,7 +339,7 @@ int kbase_platform_dvfs_init(struct kbase_device *kbdev)
 	   add here with the right function to get initilization value.
 	 */
 	if (!mali_dvfs_wq)
-		mali_dvfs_wq = create_singlethread_workqueue("mali_dvfs");
+		mali_dvfs_wq = alloc_workqueue("mali_dvfs", 0, 1);
 
 	spin_lock_init(&mali_dvfs_spinlock);
 	mutex_init(&mali_set_clock_lock);
@@ -673,11 +698,13 @@ void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
 	if (WARN_ON((level >= MALI_DVFS_STEP) || (level < 0)))
 		panic("invalid level");
 
+#ifdef CONFIG_MALI_T6XX_FREQ_LOCK
 	if (mali_dvfs_status_current.upper_lock >= 0 && level > mali_dvfs_status_current.upper_lock)
 		level = mali_dvfs_status_current.upper_lock;
 
 	if (mali_dvfs_status_current.under_lock >= 0 && level < mali_dvfs_status_current.under_lock)
 		level = mali_dvfs_status_current.under_lock;
+#endif
 
 #ifdef CONFIG_MALI_T6XX_DVFS
 	mutex_lock(&mali_set_clock_lock);
