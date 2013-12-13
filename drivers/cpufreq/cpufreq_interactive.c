@@ -650,7 +650,12 @@ static void cpufreq_interactive_boost(struct work_struct *work)
 	if (boosted_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_INTERVAL) > jiffies)
 		return;
 
-	boosted_time = jiffies;
+	/* 
+	 * You lazy bastard are officially punished for being late so next time
+	 * finish the work faster and we won't bail on you so early
+	 */
+	if (work_pending(&input_work))
+		return;
 
 	for_each_online_cpu(i) {
 		pcpu = &per_cpu(cpuinfo, i);
@@ -674,6 +679,8 @@ static void cpufreq_interactive_boost(struct work_struct *work)
 		pcpu->floor_freq = input_boost_freq;
 		pcpu->floor_validate_time = ktime_to_us(ktime_get());
 	}
+
+	boosted_time = jiffies;
 }
 
 static int cpufreq_interactive_notifier(
