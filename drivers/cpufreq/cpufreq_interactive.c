@@ -138,6 +138,8 @@ static struct work_struct input_work;
 u32 boosted_time;
 extern void input_boost_gpu_lock(void);
 
+#define CPU_SYNC_FREQ 700000
+
 /*
  * If the max load among the other CPUs is higher than sync_freq_load_threshold
  * then do not let the frequency to drop below sync_freq
