@@ -35,6 +35,7 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/jiffies.h>
 
 #include <mach/map.h>
 #include <linux/fb.h>
@@ -147,13 +148,13 @@ static int mali_dvfs_update_asv(int cmd)
 
 #define DEFAULT_BOOSTED_TIME_DURATION 1000
 #define DEFAULT_BOOSTED_TIME_INTERVAL 100
-u32 input_time;
+unsigned long input_time;
 
 void input_boost_gpu_lock(void)
 {
 	mali_dvfs_status *dvfs_status;
 
-	if (input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_INTERVAL) > jiffies)
+	if (time_is_after_jiffies(input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_INTERVAL)))
 		return;
 
 	dvfs_status = &mali_dvfs_status_current;
@@ -209,14 +210,11 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, flags);
 
-	if (!(dvfs_status->step == kbase_platform_dvfs_get_level(mali_dvfs_infotbl[dvfs_status->step].clock)))
-	{
-		if (input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_DURATION) > jiffies)
-			if (dvfs_status->step < 5)
-				goto unlock;
+	if (time_is_after_jiffies(input_time + msecs_to_jiffies(DEFAULT_BOOSTED_TIME_DURATION)))
+		if (dvfs_status->step < 5)
+			goto unlock;
 
-		kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
-	}
+	kbase_platform_dvfs_set_level(dvfs_status->kbdev, dvfs_status->step);
 
 unlock:
 	mutex_unlock(&mali_enable_clock_lock);
@@ -340,6 +338,8 @@ int kbase_platform_dvfs_init(struct kbase_device *kbdev)
 	 */
 	if (!mali_dvfs_wq)
 		mali_dvfs_wq = alloc_workqueue("mali_dvfs", 0, 1);
+
+	input_time = jiffies;
 
 	spin_lock_init(&mali_dvfs_spinlock);
 	mutex_init(&mali_set_clock_lock);
