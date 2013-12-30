@@ -186,7 +186,7 @@ static void pm_callback_runtime_off(kbase_device *kbdev)
 {
 	kbase_platform_clock_off(kbdev);
 #ifdef CONFIG_MALI_T6XX_DVFS
-	if (kbase_platform_dvfs_enable(false, MALI_DVFS_CURRENT_FREQ)!= MALI_TRUE)
+	if (kbase_platform_dvfs_enable(false, 100)!= MALI_TRUE)
 		printk("[err] disabling dvfs is faled\n");
 #endif
 }
