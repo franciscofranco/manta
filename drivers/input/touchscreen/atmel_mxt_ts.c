@@ -22,7 +22,6 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
-#include <linux/syscalls.h>
 
 /* Version */
 #define MXT_VER_20		20
@@ -697,53 +696,12 @@ static int mxt_write_object(struct mxt_data *data,
 	return mxt_write_reg(data->client, reg + offset, val);
 }
 
-#define BOOSTPULSE "/sys/devices/system/cpu/cpufreq/interactive/boostpulse"
-
-static struct boost_flo {
-	int boostpulse_fd;
-} boost = {
-	.boostpulse_fd = -1,
-};
-
-static inline int boostpulse_open(void)
-{
-	if (boost.boostpulse_fd < 0)
-	{
-		boost.boostpulse_fd = sys_open(BOOSTPULSE, O_WRONLY, 0);
-                
-		if (boost.boostpulse_fd < 0)
-		{
-			pr_info("Error opening %s\n", BOOSTPULSE);
-			return -1;                
-		}
-	}
-
-	return boost.boostpulse_fd;
-}
-
-inline void touchboost(void)
-{
-	int len;
-
-	if (boostpulse_open() >= 0)
-	{
-		len = sys_write(boost.boostpulse_fd, "1", sizeof(BOOSTPULSE));
-                        
-		if (len < 0)
-		{
-			pr_info("Error writing to %s\n", BOOSTPULSE);                        
-		}
-	}
-}
-
 static void mxt_input_report(struct mxt_data *data)
 {
 	struct mxt_finger *finger = data->finger;
 	struct input_dev *input_dev = data->input_dev;
 	int finger_num = 0;
 	int id;
-
-	touchboost();
 
 	for (id = 0; id < MXT_MAX_FINGER; id++) {
 		if (!finger[id].status)
