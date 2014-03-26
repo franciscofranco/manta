@@ -33,6 +33,9 @@ struct pwm_bl_data {
 	int			(*check_fb)(struct device *, struct fb_info *);
 };
 
+static unsigned int min_brightness = 2;
+module_param(min_brightness, int, 0664);
+
 static int pwm_backlight_update_status(struct backlight_device *bl)
 {
 	struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
@@ -52,8 +55,19 @@ static int pwm_backlight_update_status(struct backlight_device *bl)
 		pwm_config(pb->pwm, 0, pb->period);
 		pwm_disable(pb->pwm);
 	} else {
+		if (brightness <= 10) {
+			if (unlikely(min_brightness <= 1))
+				min_brightness = 2;
+
+			if (unlikely(min_brightness > 10))
+				min_brightness = 10;
+
+			brightness = min_brightness;
+		}
+
 		brightness = pb->lth_brightness +
 			(brightness * (pb->period - pb->lth_brightness) / max);
+
 		pwm_config(pb->pwm, brightness, pb->period);
 		pwm_enable(pb->pwm);
 	}
