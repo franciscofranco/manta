@@ -66,7 +66,7 @@ static spinlock_t speedchange_cpumask_lock;
 static struct mutex gov_lock;
 
 /* Hi speed to bump to from lo speed when load burst (default max) */
-static unsigned int hispeed_freq = 1500000;
+static unsigned int hispeed_freq = 1100000;
 
 /* Go to hi speed when CPU load at or above this value. */
 #define DEFAULT_GO_HISPEED_LOAD 95
@@ -110,7 +110,7 @@ static unsigned int *above_hispeed_delay = default_above_hispeed_delay;
 static int nabove_hispeed_delay = ARRAY_SIZE(default_above_hispeed_delay);
 
 /* 1000ms - 1s */
-#define DEFAULT_BOOSTPULSE_DURATION 1000000
+#define DEFAULT_BOOSTPULSE_DURATION 500000
 /* Duration of a boot pulse in usecs */
 static int boostpulse_duration_val = DEFAULT_BOOSTPULSE_DURATION;
 
@@ -127,7 +127,7 @@ static bool io_is_busy = true;
  * The CPU will be boosted to this frequency when the screen is
  * touched. input_boost needs to be enabled.
  */
-#define DEFAULT_INPUT_BOOST_FREQ 1300000
+#define DEFAULT_INPUT_BOOST_FREQ 1000000
 int input_boost_freq = DEFAULT_INPUT_BOOST_FREQ;
 extern u64 last_input_time;
 
@@ -140,9 +140,9 @@ extern u64 last_input_time;
  * sync_freq
  */
 
-static unsigned int up_threshold_any_cpu_load = 50;
+static unsigned int up_threshold_any_cpu_load = 65;
 static unsigned int sync_freq = CPU_SYNC_FREQ;
-static unsigned int up_threshold_any_cpu_freq = 1728000;
+static unsigned int up_threshold_any_cpu_freq = 1300000;
 
 
 static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
@@ -333,6 +333,15 @@ static unsigned int choose_freq(
 	return freq;
 }
 
+static unsigned int calc_freq(struct cpufreq_interactive_cpuinfo *pcpu, 
+	unsigned int load)
+{
+	unsigned int max = pcpu->policy->max;
+	unsigned int min = pcpu->policy->min;
+
+	return min + load * (max - min) / 100;
+}
+
 static u64 update_load(int cpu)
 {
 	struct cpufreq_interactive_cpuinfo *pcpu = &per_cpu(cpuinfo, cpu);
@@ -403,19 +412,15 @@ static void cpufreq_interactive_timer(unsigned long data)
 			new_freq = hispeed_freq;
 		else
 		{
-			new_freq = choose_freq(pcpu, loadadjfreq);
+			new_freq = calc_freq(pcpu, cpu_load);
 
 			if (new_freq < hispeed_freq)
 				new_freq = hispeed_freq;
 		}
 	}
-	else if (boosted)
-	{
-		new_freq = input_boost_freq;
-	}
 	else 
 	{
-		new_freq = choose_freq(pcpu, loadadjfreq);
+		new_freq = calc_freq(pcpu, cpu_load);
 
 		if (sync_freq && new_freq < sync_freq) {
 
@@ -458,7 +463,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	pcpu->hispeed_validate_time = now;
 
 	if (cpufreq_frequency_table_target(pcpu->policy, pcpu->freq_table,
-					   new_freq, CPUFREQ_RELATION_L,
+					   new_freq, CPUFREQ_RELATION_C,
 					   &index))
 		goto rearm;
 
